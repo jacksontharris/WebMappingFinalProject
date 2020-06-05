@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My map</title>
+<script type="text/javascript" src="https://d3js.org/d3.v5.min.js"></script>
+<script src='neighborhoods.js'></script>
+<script src='existing_bike_network.js'></script>
+<script src='bus_routes.js'></script>
+<link rel="stylesheet" type="text/css" href="map2.css">
+<style></style>
+</head>
+<body>
+    <div id="container" class="svg-container" style="z-index: -1">
+        <h1 style="z-index: 1">How Do Bostonians Get Around?</h1>
+        <h2 style="z-index: 1"><i>point-in-time data from June 4, 2019</i></h2>
+    </div>
+    <div id="map">
+        <div id="toggleContainer">
+            <table>
+                <tr>
+                    <td><label class="switch">
+                        <input id="bike_paths_toggle" type="checkbox">
+                        <div class="slider round"></div>
+                    </label></td>
+                    <td>Bike Paths</td>
+                </tr>
+                <tr>
+                    <td><label class="switch">
+                        <input id="b_count_toggle" type="checkbox">
+                        <div class="slider round"></div>
+                    </label></td>
+                    <td>Bike Counts</td>
+                </tr>
+                <tr>
+                    <td><label class="switch">
+                        <input id="c_count_toggle" type="checkbox">
+                        <div id="c_count" class="slider round"></div>
+                    </label></td>
+                    <td>Car Counts</td>
+                </tr>
+                <tr>
+                    <td><label class="switch">
+                        <input id="bus_routes_toggle" type="checkbox">
+                        <div id="busr" class="slider round"></div>
+                    </label></td>
+                    <td>Bus Routes</td>
+                </tr>
+            </table>
+        </div>
+        <div id="map_information">
+            <h4>Author: Jackson Harris</h4>
+            <h4>Data: City of Boston Open Data Portal</h4>
+        </div>
+    </div>
+    <script src="https://unpkg.com/d3-geo-scale-bar@1/build/d3-geo-scale-bar.min.js"></script>
+    <script type="text/javascript">
+    
+    
+    // load data  
+    var bike_counts = d3.csv("bike_data_june.csv");
+    var mv_counts = d3.csv("mv_data_june.csv");
+
+    // set container variables
+    var w = 1400;
+    var h = 700;
+    var width = 1400;
+    var height = 700;
+
+    // create space for map; enable zooming
+    var svg = d3.select('#map')
+        .append('svg')
+        .attr('width', width)
+        .attr('height', height)
+        .call(d3.zoom().on("zoom", function () {
+            svg.attr("transform", d3.event.transform)
+        }));
+
+    // add svg groups for each layer
+    var neighborhoods = svg.append('g');
+    var bike_routes = svg.append('g');
+    var bus_routes = svg.append('g');
+    var bike_count = svg.append('g');
+    var mv_count = svg.append('g');
+    const g = svg.append('g');
+
+    const miles = d3.geoScaleBar()
+        .units(d3.geoScaleMiles)
+        .top(.1)
+        .left(.5)
+        .distance(5);
+
+    const scaleBarMiles = svg.append("g");
+
+    // define coordinate projection, center on Boston
+    var albersProjection = d3.geoAlbers()
+        .scale(190000)
+        .rotate([71.057, 0])
+        .center([0, 42.313])
+        .translate([width/2, height/2]);
+
+    var geoPath = d3.geoPath()
+        .projection(albersProjection);
+
+    miles.size([width, height +5000]).projection(albersProjection);
+    scaleBarMiles.call(miles);
+
+    // create tooltip for interactive mouse events
+    var div = d3.select("body").append("div")	
+        .attr("class", "tooltip")				
+        .style("opacity", 0);
+    
+    // draw Boston neighborhoods
+    neighborhoods.selectAll('path')
+        .data(neighborhoods_json.features)
+        .enter()
+        .append('path')
+        .attr('fill', '#3394C7')
+        .attr('d', geoPath)
+        .attr('class', 'neighborhoods')
+        // highlight & display neighborhood names on mouseover event
+        .on("mouseover", function(d) {
+                d3.select(this)
+                .style("fill", "#FF9241");
+                console.log(d.properties.Name);		
+                div.transition()		
+                    .duration(200)		
+                    .style("opacity", .9);	
+                div.html("<h3>"+  d.properties.Name + "</h3>")
+                    .style("left", (d3.event.pageX) + "px")		
+                    .style("top", (d3.event.pageY - 28) + "px");
+            })
+        .on("mouseout", function(d) {
+            d3.select(this)
+            .style("fill", "#3394C7");		
+            div.transition()		
+                .duration(500)		
+                .style("opacity", 0);		
+         });
+
+        bike_routes.selectAll('path')
+            .data(bikes_json.features)
+            .enter()
+            .append('path')
+            .attr('stroke', '#34c687')
+            .attr('stroke-width', '2')
+            .style('fill', 'none')
+            .attr('d', geoPath)
+            .attr('class', 'bike_lanes')
+            .attr( "visibility", "hidden");
+
+        bus_routes.selectAll('path')
+            .data(bus_json.features)
+            .enter()
+            .append('path')
+            .attr('stroke', '#FAB627')
+            .attr('stroke-width', '2')
+            .style('fill', 'none')
+            .attr('d', geoPath)
+            .attr('class', 'bus_route')
+            .attr( "visibility", "hidden");
+
+            var columns=['12:00 AM', '1:00 AM','2:00 AM', '3:00 AM','4:00 AM','5:00 AM','6:00 AM','7:00 AM', '8:00 AM','9:00 AM', '10:00 AM','11:00 AM','12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM','4:00 PM', '5:00 PM', '6:00 PM','7:00 PM','8:00 PM','9:00 PM','10:00 PM','11:00 PM'];
+        
+        Promise.all([bike_counts, mv_counts]).then(function(values){    
+    
+            // draw points
+            bike_count.selectAll("circle")
+                .data(values[0])
+                .enter()
+                .append("circle")
+                .attr("class","bike_circles")
+                .attr("cx", function(d) {
+                    console.log(albersProjection([d.Long, d.Lat])[0]);
+                    return albersProjection([d.Long, d.Lat])[0];})
+                .attr("cy", function(d) {return albersProjection([d.Long, d.Lat])[1];})
+                .attr("r", "8px")
+                .attr('class', 'b_count')
+                .attr('fill', '#34c687')
+                .attr( "visibility", "hidden")
+                .on("mouseover", function(d) {
+                    d3.select(this)
+                    .style("fill", "orange");		
+                    div.transition()		
+                        .duration(200)		
+                        .style("opacity", .9);
+                    // var x = columns[0];
+                    console.log(d[columns[0]]);
+                    var wi = 960;
+                    var he = 1000;
+                    var adj = 20;
+                    div.html("<h3>"+  d.Street+ "</h3> <h4> Number of Bikes: " + d.Total_Daily + " </h4> <h4> Percent of Traffic: " + d.Daily_Percent + "</h4> <br/>")	
+                        .style("left", (d3.event.pageX) + "px")		
+                        .style("top", (d3.event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    d3.select(this)
+                    .style("fill", "#34c687");		
+                    div.transition()		
+                        .duration(500)		
+                        .style("opacity", 0);		
+                });
+
+
+                // draw points
+            mv_count.selectAll("circle")
+                .data(values[1])
+                .enter()
+                .append("circle")
+                .attr("class","mv_circles")
+                .attr("cx", function(d) {
+                    console.log(albersProjection([d.Long, d.Lat])[0]);
+                    return albersProjection([d.Long, d.Lat])[0];})
+                .attr("cy", function(d) {return albersProjection([d.Long, d.Lat])[1];})
+                .attr("r", "8px")
+                .attr('class', 'm_count')
+                .attr('fill', '#DA3E27')
+                .attr( "visibility", "hidden")
+                .on("mouseover", function(d) {
+                    d3.select(this)
+                    .style("fill", "orange");		
+                    div.transition()		
+                        .duration(200)		
+                        .style("opacity", .9);
+                    // var x = columns[0];
+                    console.log(d[columns[0]]);
+                    var wi = 960;
+                    var he = 1000;
+                    var adj = 20;
+                    div.html("<h3>"+  d.Street+ "</h3> <h4> Number of Cars: " + d.Total_Daily + " </h4> <h4> Percent of Traffic: " + d.Daily_Percent + "</h4> <br/>")	
+                        .style("left", (d3.event.pageX) + "px")		
+                        .style("top", (d3.event.pageY - 28) + "px");
+                })
+                .on("mouseout", function(d) {
+                    d3.select(this)
+                    .style("fill", "#DA3E27");		
+                    div.transition()		
+                        .duration(500)		
+                        .style("opacity", 0);		
+                });
+            
+        });
+
+        var bikeCheckbox = document.querySelector('input[id="bike_paths_toggle"]');
+        var busCheckbox = document.querySelector('input[id="bus_routes_toggle"]');
+        var b_countCheckbox = document.querySelector('input[id="b_count_toggle"]');
+        var mv_countCheckbox = document.querySelector('input[id="c_count_toggle"]');
+
+        
+        bikeCheckbox.onchange = function() {
+            if(this.checked) {
+                d3.selectAll(".bike_lanes").attr("visibility", "visible");
+            } else {
+                d3.selectAll(".bike_lanes").attr("visibility", "hidden");
+            }
+        };
+
+        busCheckbox.onchange = function() {
+            if(this.checked) {
+                d3.selectAll(".bus_route").attr("visibility", "visible");
+            } else {
+                d3.selectAll(".bus_route").attr("visibility", "hidden");
+            }
+        };
+
+        b_countCheckbox.onchange = function() {
+            if(this.checked) {
+                d3.selectAll(".b_count").attr("visibility", "visible");
+            } else {
+                d3.selectAll(".b_count").attr("visibility", "hidden");
+            }
+        };
+
+        mv_countCheckbox.onchange = function() {
+            if(this.checked) {
+                d3.selectAll(".m_count").attr("visibility", "visible");
+            } else {
+                d3.selectAll(".m_count").attr("visibility", "hidden");
+            }
+        };
+
+        busCheckbox.onchange = function() {
+            if(this.checked) {
+                d3.selectAll(".bus_route").attr("visibility", "visible");
+            } else {
+                d3.selectAll(".bus_route").attr("visibility", "hidden");
+            }
+        };
+
+</script>
+</body>
+</html>
